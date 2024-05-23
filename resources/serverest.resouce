@@ -1,0 +1,95 @@
+*** Settings ***
+Library    String
+Library    Collections
+Library    RequestsLibrary
+
+*** Keywords ***
+Criar um usuário novo
+    ${rand}    Generate Random String    length=8    chars=[LETTERS]
+    ${rand}    Convert To Lower Case    ${rand}
+    Set Test Variable     ${mail}    ${rand}@emailteste.com
+    Log    ${mail}
+
+Cadastrar o usuário criado na ServeRest
+    [Arguments]    ${email}    ${statusCodeWanted}
+    ${body}     Create Dictionary
+    ...         nome=Gustavo Silva
+    ...         email=${email}
+    ...         password=123456
+    ...         administrador=true   
+    Log    ${body}
+
+    Set Test Variable    ${name}    ${body.nome}
+    Set Test Variable    ${pass}    ${body.password}
+    Set Test Variable    ${isAdmin}    ${body.administrador}
+
+    Criar Sessão na ServeRest
+
+    ${response}    POST On Session
+    ...            alias=ServeRest
+    ...            url=/usuarios
+    ...            json=${body}
+    ...            expected_status=${statusCodeWanted}
+
+    Log  ${response.json()}
+    
+    IF  ${response.status_code} == 201
+        Set Test Variable    ${userId}  ${response.json()["_id"]}
+    END
+
+    Set Test Variable    ${resp}    ${response.json()}
+
+Criar Sessão na ServeRest
+    ${headers}    Create Dictionary    accept=application/json    Content-Type=application/json
+    Create Session    alias=ServeRest    url=https://serverest.dev    headers=${headers}
+
+Conferir se o usuário foi cadastrado corretamente
+    Log  ${resp}
+    Dictionary Should Contain Item    ${resp}    message  Cadastro realizado com sucesso
+    Dictionary Should Contain Key     ${resp}    _id
+
+Cadastro repetido de usuário
+    Cadastrar o usuário criado na ServeRest    email=${mail}    statusCodeWanted=400
+
+Verificar se a API não permitiu o cadastro repetido
+    Dictionary Should Contain Item    ${resp}    message    Este email já está sendo usado
+
+Consultar os dados do novo usuário
+    ${resposta_consulta}    GET On Session    alias=ServeRest    url=/usuarios/${userId}    expected_status=200
+   
+    Log   ${resposta_consulta.status_code}
+    Log   ${resposta_consulta.reason}
+    Log   ${resposta_consulta.headers}
+    Log   ${resposta_consulta.elapsed}
+    Log   ${resposta_consulta.text}
+    Log   ${resposta_consulta.json()}
+    
+    Set Test Variable     ${resp_consulta}    ${resposta_consulta.json()}
+
+Conferir os dados retornados
+    Log   ${resp_consulta}
+    Dictionary Should Contain Item    ${resp_consulta}    nome             ${name}
+    Dictionary Should Contain Item    ${resp_consulta}    email            ${mail}
+    Dictionary Should Contain Item    ${resp_consulta}    password         ${pass}
+    Dictionary Should Contain Item    ${resp_consulta}    administrador    ${isAdmin}
+    Dictionary Should Contain Item    ${resp_consulta}    _id              ${userId}
+
+Realizar Login com o usuário
+    [Arguments]    ${userEmail}    ${userPassword}    ${statusCodeWanted}
+    ${body}    Create Dictionary
+    ...    email=${userEmail}
+    ...    password=${userPassword}
+    
+    ${response}    POST On Session
+    ...            alias=ServeRest
+    ...            url=/login
+    ...            json=${body}
+    ...            expected_status=${statusCodeWanted}
+
+    Log  ${response.json()}
+    Set Test Variable    ${loginStatus}      ${response.json()}
+
+Conferir se o Login ocorreu com sucesso
+    Dictionary Should Contain Item  ${loginStatus}    message    Login realizado com sucesso
+    Dictionary Should Contain Key   ${loginStatus}    authorization
+    
